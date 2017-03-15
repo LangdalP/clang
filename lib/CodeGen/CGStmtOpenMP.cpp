@@ -1738,6 +1738,11 @@ void CodeGenFunction::EmitOMPOuterLoop(bool DynamicOrOrdered, bool IsMonotonic,
   }
   EmitBlock(LoopBody);
 
+  // PVL: Load lb, ub, and notify runtime about chunk start
+  auto LBVal = EmitLoadOfScalar(LB, false, S.getLowerBoundVariable()->getType(), S.getLocStart());
+  auto UBVal = EmitLoadOfScalar(UB, false, S.getUpperBoundVariable()->getType(), S.getLocStart());
+  RT.emitForStaticChunk(*this, S.getLocStart(), IVSize, IVSigned, LBVal, UBVal);
+
   // Emit "IV = LB" (in case of static schedule, we have already calculated new
   // LB for loop condition and emitted it above).
   if (DynamicOrOrdered)

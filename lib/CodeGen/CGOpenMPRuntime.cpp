@@ -1664,6 +1664,28 @@ llvm::Constant *CGOpenMPRuntime::createForStaticInitFunction(unsigned IVSize,
   return CGM.CreateRuntimeFunction(FnTy, Name);
 }
 
+// PVL
+llvm::Constant *CGOpenMPRuntime::createForStaticChunkFunction(unsigned IVSize,
+                                                              bool IVSigned) {
+  assert((IVSize == 32 || IVSize == 64) &&
+         "IV size is not compatible with the omp runtime");
+  auto Name =
+      IVSize == 32
+      ? (IVSigned ? "__kmpc_for_static_chunk_4" : "__kmpc_for_static_chunk_4u")
+      : (IVSigned ? "__kmpc_for_static_chunk_8" : "__kmpc_for_static_chunk_8u");
+  auto ITy = IVSize == 32 ? CGM.Int32Ty : CGM.Int64Ty;
+  llvm::Type *TypeParams[] = {
+      getIdentTyPointerTy(),                     // loc
+      CGM.Int32Ty,                               // tid
+      CGM.Int32Ty,                               // last chunk?
+      ITy,                                       // lb
+      ITy,                                       // ub
+  };
+  llvm::FunctionType *FnTy =
+      llvm::FunctionType::get(CGM.VoidTy, TypeParams, /*isVarArg*/ false);
+  return CGM.CreateRuntimeFunction(FnTy, Name);
+}
+
 llvm::Constant *CGOpenMPRuntime::createDispatchInitFunction(unsigned IVSize,
                                                             bool IVSigned) {
   assert((IVSize == 32 || IVSize == 64) &&
@@ -2571,6 +2593,23 @@ void CGOpenMPRuntime::emitForStaticFinish(CodeGenFunction &CGF,
   llvm::Value *Args[] = {emitUpdateLocation(CGF, Loc), getThreadID(CGF, Loc)};
   CGF.EmitRuntimeCall(createRuntimeFunction(OMPRTL__kmpc_for_static_fini),
                       Args);
+}
+
+// PVL
+void CGOpenMPRuntime::emitForStaticChunk(CodeGenFunction &CGF, SourceLocation Loc, unsigned IVSize, bool IVSigned,
+                                         llvm::Value *LB, llvm::Value *UB) {
+  if (!CGF.HaveInsertPoint())
+    return;
+  // Call __kmpc_dispatch_next(...);
+  llvm::Constant *LastChunk = llvm::ConstantInt::getIntegerValue(CGM.Int32Ty, llvm::APInt(32, 0, true));
+  llvm::Value *Args[] = {
+      emitUpdateLocation(CGF, Loc),
+      getThreadID(CGF, Loc),
+      LastChunk,
+      LB,
+      UB
+  };
+  CGF.EmitRuntimeCall(createForStaticChunkFunction(IVSize, IVSigned), Args);
 }
 
 void CGOpenMPRuntime::emitForOrderedIterationEnd(CodeGenFunction &CGF,
