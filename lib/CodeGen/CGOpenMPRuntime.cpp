@@ -1686,6 +1686,14 @@ llvm::Constant *CGOpenMPRuntime::createForStaticChunkFunction(unsigned IVSize,
   return CGM.CreateRuntimeFunction(FnTy, Name);
 }
 
+llvm::Constant *CGOpenMPRuntime::createShouldCallbackPerChunk() {
+  const char *Name = "__kmpc_should_callback_per_chunk";
+  llvm::Type *TypeParams[] = { getIdentTyPointerTy() /* loc */ };
+  llvm::FunctionType *FnTy =
+      llvm::FunctionType::get(CGM.Int32Ty, TypeParams, /*isVarArg*/ false);
+  return CGM.CreateRuntimeFunction(FnTy, Name);
+}
+
 llvm::Constant *CGOpenMPRuntime::createDispatchInitFunction(unsigned IVSize,
                                                             bool IVSigned) {
   assert((IVSize == 32 || IVSize == 64) &&
@@ -2610,6 +2618,18 @@ void CGOpenMPRuntime::emitForStaticChunk(CodeGenFunction &CGF, SourceLocation Lo
       UB
   };
   CGF.EmitRuntimeCall(createForStaticChunkFunction(IVSize, IVSigned), Args);
+}
+
+llvm::Value *CGOpenMPRuntime::emitShouldCallbackPerChunk(CodeGenFunction &CGF, SourceLocation Loc)
+{
+  // TODO
+  // Call __kmpc_should_callback_per_chunk( ident_t *loc );
+  llvm::Value *Args[] = { emitUpdateLocation(CGF, Loc) };
+  llvm::Value *Call =
+      CGF.EmitRuntimeCall(createShouldCallbackPerChunk(), Args);
+  return CGF.EmitScalarConversion(
+      Call, CGF.getContext().getIntTypeForBitwidth(32, /* Signed */ true),
+      CGF.getContext().BoolTy, Loc);
 }
 
 void CGOpenMPRuntime::emitForOrderedIterationEnd(CodeGenFunction &CGF,

@@ -435,6 +435,9 @@ private:
   /// size \a IVSize and sign \a IVSigned.
   llvm::Constant *createForStaticChunkFunction(unsigned IVSize, bool IVSigned);
 
+  /// \brief Returns __kmpc_shoud_callback_per_chunk runtime function 
+  llvm::Constant *createShouldCallbackPerChunk();
+
   /// \brief Returns __kmpc_dispatch_init_* runtime function for the specified
   /// size \a IVSize and sign \a IVSigned.
   llvm::Constant *createDispatchInitFunction(unsigned IVSize, bool IVSigned);
@@ -759,8 +762,24 @@ public:
   /// \param IVSigned Sign of the interation variable.
   /// \param LB The lower iteration bound for chunk
   /// \param UB The upper iteration bound for chunk
+  ///
   virtual void emitForStaticChunk(CodeGenFunction &CGF, SourceLocation Loc, unsigned IVSize, bool IVSigned,
                                   llvm::Value *LB, llvm::Value *UB);
+
+  /// \brief Ask runtime whether __kmpc_for_static_chunk_X should be called
+  ///
+  /// Call __kmpc_should_callback_per_chunk. This function allows avoiding
+  /// chunk runtime calls if OMPT is disabled or no tool has registered for
+  /// the chunk callback
+  ///
+  /// \param CGF Reference to current CodeGenFunction.
+  /// \param Loc Clang source location.
+  /// \param IVSize Size of the iteration variable in bits.
+  /// \param IVSigned Sign of the interation variable.
+  /// \param LB The lower iteration bound for chunk
+  /// \param UB The upper iteration bound for chunk
+  ///
+  virtual llvm::Value *emitShouldCallbackPerChunk(CodeGenFunction &CGF, SourceLocation Loc);
 
   /// Call __kmpc_dispatch_next(
   ///          ident_t *loc, kmp_int32 tid, kmp_int32 *p_lastiter,

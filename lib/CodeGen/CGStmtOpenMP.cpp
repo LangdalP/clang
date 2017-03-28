@@ -1695,7 +1695,8 @@ void CodeGenFunction::EmitOMPSimdDirective(const OMPSimdDirective &S) {
 
 void CodeGenFunction::EmitOMPOuterLoop(bool DynamicOrOrdered, bool IsMonotonic,
     const OMPLoopDirective &S, OMPPrivateScope &LoopScope, bool Ordered,
-    Address LB, Address UB, Address ST, Address IL, llvm::Value *Chunk) {
+    Address LB, Address UB, Address ST, Address IL, llvm::Value *Chunk,
+    llvm::Value *ShouldChunkCall) {
   auto &RT = CGM.getOpenMPRuntime();
 
   const Expr *IVExpr = S.getIterationVariable();
@@ -1730,19 +1731,24 @@ void CodeGenFunction::EmitOMPOuterLoop(bool DynamicOrOrdered, bool IsMonotonic,
   if (LoopScope.requiresCleanups())
     ExitBlock = createBasicBlock("omp.dispatch.cleanup");
 
-  auto LoopBody = createBasicBlock("omp.dispatch.body");
-  Builder.CreateCondBr(BoolCondVal, LoopBody, ExitBlock);
+  auto LoopBodyStart = createBasicBlock("omp.dispatch.body.start");
+  Builder.CreateCondBr(BoolCondVal, LoopBodyStart, ExitBlock);
   if (ExitBlock != LoopExit.getBlock()) {
     EmitBlock(ExitBlock);
     EmitBranchThroughCleanup(LoopExit);
   }
-  EmitBlock(LoopBody);
+  EmitBlock(LoopBodyStart);
 
-  // PVL: Load lb, ub, and notify runtime about chunk start
+  // PVL: Conditionally notify runtime about chunk start
+  auto ChunkCall = createBasicBlock("omp.dispatch.chunk");
+  auto LoopBody = createBasicBlock("omp.dispatch.body");
+  Builder.CreateCondBr(ShouldChunkCall, ChunkCall, LoopBody);
+  EmitBlock(ChunkCall);
   auto LBVal = EmitLoadOfScalar(LB, false, S.getLowerBoundVariable()->getType(), S.getLocStart());
   auto UBVal = EmitLoadOfScalar(UB, false, S.getUpperBoundVariable()->getType(), S.getLocStart());
   RT.emitForStaticChunk(*this, S.getLocStart(), IVSize, IVSigned, LBVal, UBVal);
 
+  EmitBlock(LoopBody);
   // Emit "IV = LB" (in case of static schedule, we have already calculated new
   // LB for loop condition and emitted it above).
   if (DynamicOrOrdered)
@@ -1861,18 +1867,20 @@ void CodeGenFunction::EmitOMPForOuterLoop(
   const Expr *IVExpr = S.getIterationVariable();
   const unsigned IVSize = getContext().getTypeSize(IVExpr->getType());
   const bool IVSigned = IVExpr->getType()->hasSignedIntegerRepresentation();
+  llvm::Value *ShouldChunkCall = nullptr;
 
   if (DynamicOrOrdered) {
     llvm::Value *UBVal = EmitScalarExpr(S.getLastIteration());
     RT.emitForDispatchInit(*this, S.getLocStart(), ScheduleKind, IVSize,
                            IVSigned, Ordered, UBVal, Chunk);
   } else {
+    ShouldChunkCall = RT.emitShouldCallbackPerChunk(*this, S.getLocStart());
     RT.emitForStaticInit(*this, S.getLocStart(), ScheduleKind, IVSize, IVSigned,
                          Ordered, IL, LB, UB, ST, Chunk);
   }
 
   EmitOMPOuterLoop(DynamicOrOrdered, IsMonotonic, S, LoopScope, Ordered, LB, UB,
-                   ST, IL, Chunk);
+                   ST, IL, Chunk, ShouldChunkCall);
 }
 
 void CodeGenFunction::EmitOMPDistributeOuterLoop(
@@ -1896,7 +1904,7 @@ void CodeGenFunction::EmitOMPDistributeOuterLoop(
                               IL, LB, UB, ST, Chunk);
 
   EmitOMPOuterLoop(/* DynamicOrOrdered = */ false, /* IsMonotonic = */ false,
-                   S, LoopScope, /* Ordered = */ false, LB, UB, ST, IL, Chunk);
+                   S, LoopScope, /* Ordered = */ false, LB, UB, ST, IL, Chunk, nullptr);
 }
 
 void CodeGenFunction::EmitOMPDistributeParallelForDirective(

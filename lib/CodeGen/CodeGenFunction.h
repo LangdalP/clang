@@ -2748,7 +2748,8 @@ private:
   bool EmitOMPWorksharingLoop(const OMPLoopDirective &S);
   void EmitOMPOuterLoop(bool IsMonotonic, bool DynamicOrOrdered,
       const OMPLoopDirective &S, OMPPrivateScope &LoopScope, bool Ordered,
-      Address LB, Address UB, Address ST, Address IL, llvm::Value *Chunk);
+      Address LB, Address UB, Address ST, Address IL, llvm::Value *Chunk,
+      llvm::Value *ShouldChunkCall);
   void EmitOMPForOuterLoop(const OpenMPScheduleTy &ScheduleKind,
                            bool IsMonotonic, const OMPLoopDirective &S,
                            OMPPrivateScope &LoopScope, bool Ordered, Address LB,
