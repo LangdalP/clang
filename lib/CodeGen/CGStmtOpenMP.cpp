@@ -1867,6 +1867,7 @@ void CodeGenFunction::EmitOMPForOuterLoop(
   const Expr *IVExpr = S.getIterationVariable();
   const unsigned IVSize = getContext().getTypeSize(IVExpr->getType());
   const bool IVSigned = IVExpr->getType()->hasSignedIntegerRepresentation();
+  // PVL
   llvm::Value *ShouldChunkCall = nullptr;
 
   if (DynamicOrOrdered) {
@@ -2187,6 +2188,8 @@ bool CodeGenFunction::EmitOMPWorksharingLoop(const OMPLoopDirective &S) {
           !Ordered) {
         if (isOpenMPSimdDirective(S.getDirectiveKind()))
           EmitOMPSimdInit(S, /*IsMonotonic=*/true);
+        // PVL
+        llvm::Value *ShouldChunkCall = RT.emitShouldCallbackPerChunk(*this, S.getLocStart());
         // OpenMP [2.7.1, Loop Construct, Description, table 2-1]
         // When no chunk_size is specified, the iteration space is divided into
         // chunks that are approximately equal in size, and at most one chunk is
@@ -2202,6 +2205,15 @@ bool CodeGenFunction::EmitOMPWorksharingLoop(const OMPLoopDirective &S) {
         EmitIgnoredExpr(S.getEnsureUpperBound());
         // IV = LB;
         EmitIgnoredExpr(S.getInit());
+        // Conditionally invoke chunk callback before inner loop
+        auto ChunkCall = createBasicBlock("omp.dispatch.chunk");
+        auto LoopInner = createBasicBlock("omp.loop.inner");
+        Builder.CreateCondBr(ShouldChunkCall, ChunkCall, LoopInner);
+        EmitBlock(ChunkCall);
+        auto LBVal = EmitLoadOfScalar(LB, S.getLocStart());
+        auto UBVal = EmitLoadOfScalar(UB, S.getLocStart());
+        RT.emitForStaticChunk(*this, S.getLocStart(), IVSize, IVSigned, LBVal, UBVal);
+        EmitBlock(LoopInner);
         // while (idx <= UB) { BODY; ++idx; }
         EmitOMPInnerLoop(S, LoopScope.requiresCleanups(), S.getCond(),
                          S.getInc(),
