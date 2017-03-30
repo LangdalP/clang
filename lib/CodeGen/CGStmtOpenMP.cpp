@@ -1739,14 +1739,16 @@ void CodeGenFunction::EmitOMPOuterLoop(bool DynamicOrOrdered, bool IsMonotonic,
   }
   EmitBlock(LoopBodyStart);
 
-  // PVL: Conditionally notify runtime about chunk start
-  auto ChunkCall = createBasicBlock("omp.dispatch.chunk");
   auto LoopBody = createBasicBlock("omp.dispatch.body");
-  Builder.CreateCondBr(ShouldChunkCall, ChunkCall, LoopBody);
-  EmitBlock(ChunkCall);
-  auto LBVal = EmitLoadOfScalar(LB, false, S.getLowerBoundVariable()->getType(), S.getLocStart());
-  auto UBVal = EmitLoadOfScalar(UB, false, S.getUpperBoundVariable()->getType(), S.getLocStart());
-  RT.emitForStaticChunk(*this, S.getLocStart(), IVSize, IVSigned, LBVal, UBVal);
+  if (ShouldChunkCall != nullptr) {
+    // PVL: Conditionally notify runtime about chunk start
+    auto ChunkCall = createBasicBlock("omp.dispatch.chunk");
+    Builder.CreateCondBr(ShouldChunkCall, ChunkCall, LoopBody);
+    EmitBlock(ChunkCall);
+    auto LBVal = EmitLoadOfScalar(LB, false, S.getLowerBoundVariable()->getType(), S.getLocStart());
+    auto UBVal = EmitLoadOfScalar(UB, false, S.getUpperBoundVariable()->getType(), S.getLocStart());
+    RT.emitForStaticChunk(*this, S.getLocStart(), IVSize, IVSigned, LBVal, UBVal);
+  }
 
   EmitBlock(LoopBody);
   // Emit "IV = LB" (in case of static schedule, we have already calculated new
