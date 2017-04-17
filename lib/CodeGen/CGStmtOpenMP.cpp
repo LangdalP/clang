@@ -1740,7 +1740,7 @@ void CodeGenFunction::EmitOMPOuterLoop(bool DynamicOrOrdered, bool IsMonotonic,
   EmitBlock(LoopBodyStart);
 
   auto LoopBody = createBasicBlock("omp.dispatch.body");
-  if (ShouldChunkCall != nullptr) {
+  if (!DynamicOrOrdered && ShouldChunkCall != nullptr) {
     // PVL: Conditionally notify runtime about chunk start
     auto ChunkCall = createBasicBlock("omp.dispatch.chunk");
     Builder.CreateCondBr(ShouldChunkCall, ChunkCall, LoopBody);
